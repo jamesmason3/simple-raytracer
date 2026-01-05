@@ -1,21 +1,15 @@
-# Next update:
-# each ray has a set number of light bounces (5)
-# make raytrace() recursive to handle bounces
-# first check how many bounces are left (function parameter)
-# if 0, return ambient light color  
-# else, check for intersection
-# if intersection, modify color, calculate reflection ray
 
 import numpy as np
 import math
 import sys
 
 class Sphere:
-    def __init__(self, center, radius, color):
+    def __init__(self, center, radius, color, roughness, shininess):
         self.center = center
         self.radius = radius
         self.color = color
-        # self.roughness = roughness
+        self.roughness = roughness
+        self.shininess = shininess
 
 class Ray:
     def __init__(self, origin, direction):
@@ -23,8 +17,8 @@ class Ray:
         self.direction = direction
 
 #pixels
-pixel_width = 256
-pixel_height = 256
+pixel_width = 512
+pixel_height = 512
 # aspect_ratio = width / height
 camera_pos = np.array([0, 0, 0])
 focal_length = 1.0
@@ -35,19 +29,24 @@ camera_fov = 90
 screen_width = 2 * focal_length * math.tan(math.radians(camera_fov) / 2)
 screen_height = screen_width
 
-sphere = Sphere(np.array([-1, -1, 4]), 2, (255, 0, 255)) 
-sphere2 = Sphere(np.array([2, 3, 6]), 2, (0, 255, 0)) 
 
-objects = [sphere, sphere2]
+objects = [
+    Sphere(np.array([0, -2, 2]), 1.0, (200, 200, 200), 0.75, 100), # mirror sphere
+    Sphere(np.array([2, 0, 4]), 1.0, (255, 0, 0), 0.1, 40), # red sphere
+    Sphere(np.array([-2, 0, 4]), 1.0, (0, 255, 0), 0.0001, 25), # green sphere
+]
+
+light_source = np.array([0, 5, 0])
 
 pixels = [[(255,255,255) for _ in range(pixel_width)] for _ in range(pixel_height)]
 
-# sphere_color = (1, 0, 1)
-ambient_light = 0.3
+ambient_light = 0.2
+shininess = 50
 
-light_source = np.array([0, 200000, 0])
-
-def raytrace(ray, objects):
+def raytrace(ray, objects, bounces_left):
+    if bounces_left == 0:
+        return (0, 0, 0)
+    
     closest_dist = sys.maxsize
     closest_obj = None
     
@@ -76,14 +75,42 @@ def raytrace(ray, objects):
         normal = hit_point - closest_obj.center
         normal = normal / np.linalg.norm(normal)
         
+        if np.dot(ray.direction, normal) > 0:
+            normal = -normal
+    
         to_light = light_source - hit_point
         to_light = to_light / np.linalg.norm(to_light)
         
+        # Specular 
+        view_dir = -ray.direction
+        half_vec = to_light + view_dir
+        half_vec = half_vec / np.linalg.norm(half_vec)
+        
+        spec = max(np.dot(normal, half_vec), 0) ** closest_obj.shininess
+        specular = int(255 * spec)
+        
         diffuse_intensity = max(np.dot(normal, to_light), 0)
         intensity = ambient_light + (1 - ambient_light) * diffuse_intensity
-        diffuse_color = tuple(min(int(c * intensity), 255) for c in closest_obj.color)
+        diffuse_color = tuple(min(int(c * intensity + specular), 255) for c in closest_obj.color)
+        
+        # Calculate reflection ray
+        reflect_dir = ray.direction - 2 * np.dot(ray.direction, normal) * normal
+        reflect_dir = reflect_dir / np.linalg.norm(reflect_dir)
+        reflect_ray = Ray(hit_point + normal * 1e-5, reflect_dir)
 
-        return diffuse_color
+        # Recursive call
+        reflected_color = raytrace(reflect_ray, objects, bounces_left - 1)
+
+        # Calculate final color with roughness
+        final_color = tuple(
+            min(int(
+                (1 - closest_obj.roughness) * d +
+                closest_obj.roughness * r
+            ), 255)
+            for d, r in zip(diffuse_color, reflected_color)
+)
+        
+        return final_color
     else:
         return (255, 255, 255)
 
@@ -99,7 +126,7 @@ for j in range(pixel_height):
         direction = direction / np.linalg.norm(direction)
 
         # Raytrace
-        pixels[j][i] = raytrace(Ray(camera_pos, direction), objects)
+        pixels[j][i] = raytrace(Ray(camera_pos, direction), objects, 5)
         
 
 
@@ -114,4 +141,4 @@ def create_ppm(filename, width, height, pixels):
         
         
 
-create_ppm('scene.ppm', 256, 256, pixels)
+create_ppm('scene.ppm', 512, 512, pixels)
