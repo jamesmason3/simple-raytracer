@@ -1,3 +1,4 @@
+# create objects as light sources
 
 import numpy as np
 import math
@@ -10,6 +11,7 @@ class Sphere:
         self.color = color
         self.roughness = roughness
         self.shininess = shininess
+        self.is_light = False
 
 class Ray:
     def __init__(self, origin, direction):
@@ -31,9 +33,9 @@ screen_height = screen_width
 
 
 objects = [
-    Sphere(np.array([0, -2, 2]), 1.0, (200, 200, 200), 0.75, 100), # mirror sphere
-    Sphere(np.array([2, 0, 4]), 1.0, (255, 0, 0), 0.1, 40), # red sphere
-    Sphere(np.array([-2, 0, 4]), 1.0, (0, 255, 0), 0.0001, 25), # green sphere
+    Sphere(np.array([0, -1, 2]), 1.0, (200, 200, 200), 0.75, 100), # mirror sphere
+    Sphere(np.array([2, 0, 2]), 1.0, (0, 0, 255), 0.1, 40),
+    Sphere(np.array([-2, 0, 2]), 1.0, (0, 255, 0), 0.01, 25), # green sphere
 ]
 
 light_source = np.array([0, 5, 0])
@@ -86,12 +88,12 @@ def raytrace(ray, objects, bounces_left):
         half_vec = to_light + view_dir
         half_vec = half_vec / np.linalg.norm(half_vec)
         
-        spec = max(np.dot(normal, half_vec), 0) ** closest_obj.shininess
-        specular = int(255 * spec)
+        specular = max(np.dot(normal, half_vec), 0) ** closest_obj.shininess
+        specular_color = int(255 * specular)
         
         diffuse_intensity = max(np.dot(normal, to_light), 0)
         intensity = ambient_light + (1 - ambient_light) * diffuse_intensity
-        diffuse_color = tuple(min(int(c * intensity + specular), 255) for c in closest_obj.color)
+        diffuse_color = tuple(min(int(c * intensity + specular_color), 255) for c in closest_obj.color)
         
         # Calculate reflection ray
         reflect_dir = ray.direction - 2 * np.dot(ray.direction, normal) * normal
